@@ -588,6 +588,76 @@ html, body {
 }
 .modal-confirm:hover { opacity: 0.85; }
 
+/* ─── Browser nav bar ───────────────────────────────────────── */
+.browser-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: #0d0d0d;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 32px;
+}
+
+.nav-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  line-height: 1;
+}
+.nav-btn:hover {
+  background: var(--surface);
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.nav-url {
+  flex: 1;
+  height: 22px;
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 8px;
+  outline: none;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+.nav-url:focus { border-color: var(--accent); }
+.nav-url::placeholder { color: var(--muted2); }
+
+.nav-go {
+  height: 22px;
+  padding: 0 8px;
+  background: var(--muted2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+.nav-go:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 /* ─── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
