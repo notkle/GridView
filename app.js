@@ -23,6 +23,38 @@ const pool = [0, 1, 2, 3].map(i => {
   return f;
 });
 
+// ─── Piped instance resolution ────────────────────────────────
+// Piped is an open-source, iframe-friendly YouTube frontend.
+// We fetch the live instances list from Piped's API and pick the
+// first healthy one. Hardcoded fallbacks used if the API is down.
+const PIPED_FALLBACKS = [
+  'https://piped.video',
+  'https://piped.adminforge.de',
+  'https://piped.privacydev.net',
+];
+
+let pipedInstance = PIPED_FALLBACKS[0]; // default until resolved
+
+async function resolvePipedInstance() {
+  try {
+    const res  = await fetch('https://piped-instances.kavin.rocks/', { signal: AbortSignal.timeout(4000) });
+    const list = await res.json();
+    // list is an array of { name, api_url, locations, ... }
+    // Pick first instance that has uptime > 90 and is not flagged
+    const good = list.find(i => i.uptime_24h == null || i.uptime_24h > 80);
+    if (good && good.name) {
+      // name is the frontend URL e.g. "https://piped.video"
+      pipedInstance = good.name.replace(/\/$/, '');
+      console.log('[viewgrid] Piped instance resolved:', pipedInstance);
+    }
+  } catch (_) {
+    console.log('[viewgrid] Piped instances API unreachable, using fallback:', pipedInstance);
+  }
+  // Update the YouTube button hint in the picker
+  const hint = document.getElementById('yt-instance-hint');
+  if (hint) hint.textContent = pipedInstance;
+}
+
 // ─── Service Config ───────────────────────────────────────────
 const SERVICES = {
   twitch: {
@@ -30,26 +62,22 @@ const SERVICES = {
     isLive:     true,
     inputLabel: 'Channel name',
     placeholder:'e.g. yourfavoritestreamer',
+    needsInput: true,
     embedUrl: (v) =>
       `https://player.twitch.tv/?channel=${encodeURIComponent(v.trim())}&parent=${location.hostname || 'localhost'}&autoplay=true`,
   },
   youtube: {
     label:      'youtube',
     isLive:     false,
-    inputLabel: 'Video URL or ID',
-    placeholder:'e.g. https://youtube.com/watch?v=...',
-    embedUrl: (v) => {
-      const id = extractYouTubeId(v.trim());
-      return id
-        ? `https://www.youtube.com/embed/${id}?autoplay=1`
-        : `https://www.youtube.com/embed/?autoplay=1`;
-    },
+    needsInput: false, // browse directly — no input needed
+    embedUrl: () => pipedInstance,
   },
   kick: {
     label:      'kick',
     isLive:     true,
     inputLabel: 'Channel name',
     placeholder:'e.g. channelname',
+    needsInput: true,
     embedUrl: (v) =>
       `https://player.kick.com/${encodeURIComponent(v.trim())}?autoplay=true`,
   },
@@ -58,14 +86,10 @@ const SERVICES = {
     isLive:     false,
     inputLabel: 'URL',
     placeholder:'https://...',
+    needsInput: true,
     embedUrl: (v) => v.trim(),
   },
 };
-
-function extractYouTubeId(url) {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
-}
 
 // ─── Picker ───────────────────────────────────────────────────
 let pickerTargetIndex = null;
@@ -88,6 +112,14 @@ function closePicker() {
 function selectService(service) {
   pickerService = service;
   const cfg = SERVICES[service];
+
+  // YouTube/Piped loads directly — no input needed
+  if (!cfg.needsInput) {
+    addStream(pickerTargetIndex, service, '', 'youtube');
+    closePicker();
+    return;
+  }
+
   document.getElementById('inputLabel').textContent       = cfg.inputLabel;
   document.getElementById('modalInput').placeholder       = cfg.placeholder;
   document.getElementById('modalInput').value             = '';
@@ -98,22 +130,22 @@ function selectService(service) {
 function confirmStream() {
   const val = document.getElementById('modalInput').value.trim();
   if (!val || pickerTargetIndex === null || !pickerService) return;
-  const cfg = SERVICES[pickerService];
-
-  state.streams[pickerTargetIndex] = {
-    service:  pickerService,
-    value:    val,
-    label:    val,
-    isLive:   cfg.isLive,
-    embedUrl: cfg.embedUrl(val),
-  };
-
-  // Set src once — the only time we touch it
-  pool[pickerTargetIndex].src = state.streams[pickerTargetIndex].embedUrl;
-
+  addStream(pickerTargetIndex, pickerService, val, val);
   closePicker();
+}
+
+function addStream(index, service, value, label) {
+  const cfg = SERVICES[service];
+  state.streams[index] = {
+    service,
+    value,
+    label,
+    isLive:   cfg.isLive,
+    embedUrl: cfg.embedUrl(value),
+  };
+  pool[index].src = state.streams[index].embedUrl;
   layout();
-  startAdDetection(pickerTargetIndex);
+  startAdDetection(index);
 }
 
 document.getElementById('modalInput').addEventListener('keydown', e => {
@@ -467,4 +499,5 @@ window.simulateAd = (slotIndex, isAd) => {
 
 // ─── Init ─────────────────────────────────────────────────────
 document.getElementById('lbl-grid').classList.add('active');
+resolvePipedInstance(); // async — resolves best Piped instance in background
 layout();
