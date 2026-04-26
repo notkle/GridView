@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>viewgrid</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="app" id="app">
+
+    <header class="topbar">
+      <div class="logo">viewgrid<span class="logo-dot">.</span></div>
+      <div class="topbar-center" id="ad-alert" style="display:none">
+        <div class="ad-alert-pill">
+          <span class="ad-dot"></span>
+          ad detected — swapping focus
+        </div>
+      </div>
+      <div class="controls">
+        <div class="zoom-toggle-wrap">
+          <span class="toggle-label" id="lbl-grid">grid</span>
+          <button class="zoom-toggle" id="zoomToggle" aria-pressed="false" onclick="toggleZoom()">
+            <span class="zoom-thumb"></span>
+          </button>
+          <span class="toggle-label" id="lbl-zoom">zoom</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+
+      <!-- GRID MODE -->
+      <div class="grid-view" id="gridView">
+        <div class="cell" id="cell-0" data-index="0">
+          <div class="cell-empty" onclick="openPicker(0)">
+            <div class="plus-btn">+</div>
+            <span class="plus-label">add stream</span>
+          </div>
+        </div>
+        <div class="cell" id="cell-1" data-index="1">
+          <div class="cell-empty" onclick="openPicker(1)">
+            <div class="plus-btn">+</div>
+            <span class="plus-label">add stream</span>
+          </div>
+        </div>
+        <div class="cell" id="cell-2" data-index="2">
+          <div class="cell-empty" onclick="openPicker(2)">
+            <div class="plus-btn">+</div>
+            <span class="plus-label">add stream</span>
+          </div>
+        </div>
+        <div class="cell" id="cell-3" data-index="3">
+          <div class="cell-empty" onclick="openPicker(3)">
+            <div class="plus-btn">+</div>
+            <span class="plus-label">add stream</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZOOM MODE -->
+      <div class="zoom-view" id="zoomView" style="display:none">
+        <div class="zoom-main" id="zoomMain">
+          <div class="zoom-empty">
+            <span>select a stream to focus</span>
+          </div>
+        </div>
+        <div class="zoom-dock" id="zoomDock">
+          <div class="dock-slot" id="dock-0"></div>
+          <div class="dock-slot" id="dock-1"></div>
+          <div class="dock-slot" id="dock-2"></div>
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- SERVICE PICKER MODAL -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closePicker()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title">add a source</span>
+        <button class="modal-close" onclick="closePicker()">✕</button>
+      </div>
+      <div class="modal-services">
+        <button class="service-btn" data-service="twitch" onclick="selectService('twitch')">
+          <svg class="service-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
+          <span>Twitch</span>
+          <span class="service-hint">channel name</span>
+        </button>
+        <button class="service-btn" data-service="youtube" onclick="selectService('youtube')">
+          <svg class="service-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+          <span>YouTube</span>
+          <span class="service-hint">video or channel URL</span>
+        </button>
+        <button class="service-btn" data-service="kick" onclick="selectService('kick')">
+          <svg class="service-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M2 2h4v8l6-8h5l-7 9 7 11h-5l-6-9v9H2z"/></svg>
+          <span>Kick</span>
+          <span class="service-hint">channel name</span>
+        </button>
+        <button class="service-btn" data-service="url" onclick="selectService('url')">
+          <svg class="service-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <span>Any URL</span>
+          <span class="service-hint">any embeddable page</span>
+        </button>
+      </div>
+      <div class="modal-input-wrap" id="modalInputWrap" style="display:none">
+        <label class="input-label" id="inputLabel">Channel name</label>
+        <input class="modal-input" id="modalInput" type="text" placeholder="" />
+        <button class="modal-confirm" onclick="confirmStream()">add →</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
