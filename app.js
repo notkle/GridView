@@ -45,10 +45,10 @@ async function resolvePipedInstance() {
     if (good && good.name) {
       // name is the frontend URL e.g. "https://piped.video"
       pipedInstance = good.name.replace(/\/$/, '');
-      console.log('[viewgrid] Piped instance resolved:', pipedInstance);
+      console.log('[gridview] Piped instance resolved:', pipedInstance);
     }
   } catch (_) {
-    console.log('[viewgrid] Piped instances API unreachable, using fallback:', pipedInstance);
+    console.log('[gridview] Piped instances API unreachable, using fallback:', pipedInstance);
   }
   // Update the YouTube button hint in the picker
   const hint = document.getElementById('yt-instance-hint');
@@ -84,10 +84,15 @@ const SERVICES = {
   url: {
     label:      'url',
     isLive:     false,
-    inputLabel: 'URL',
-    placeholder:'https://...',
+    inputLabel: 'Full URL (include https://)',
+    placeholder:'https://example.com',
     needsInput: true,
-    embedUrl: (v) => v.trim(),
+    embedUrl: (v) => {
+      v = v.trim();
+      // Auto-prepend https:// if user forgot it
+      if (v && !v.match(/^https?:\/\//i)) v = 'https://' + v;
+      return v;
+    },
   },
 };
 
@@ -373,7 +378,7 @@ function startAdDetection(slotIndex) {
     if (!e.data || typeof e.data !== 'object') return;
 
     // Extension message — primary, high confidence
-    if (e.data.source === 'viewgrid-extension' && e.data.type === 'vg-ad') {
+    if (e.data.source === 'gridview-extension' && e.data.type === 'vg-ad') {
       const channel = (e.data.channel || '').toLowerCase().trim();
       const s       = state.streams[slotIndex];
       if (s && s.value.toLowerCase().trim() === channel) {
@@ -493,7 +498,7 @@ function flashAdAlert() {
 
 // ─── Dev helper ───────────────────────────────────────────────
 window.simulateAd = (slotIndex, isAd) => {
-  console.log(`[viewgrid] simulateAd(${slotIndex}, ${isAd})`);
+  console.log(`[gridview] simulateAd(${slotIndex}, ${isAd})`);
   handleAdDetected(slotIndex, isAd);
 };
 
