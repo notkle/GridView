@@ -662,3 +662,138 @@ html, body {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── Notepad panel ─────────────────────────────────────────── */
+.notepad-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #f7f4ee;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.notepad-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #eeeae0;
+  border-bottom: 1px solid #d8d2c4;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.notepad-tools-left,
+.notepad-tools-right {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.nt-btn {
+  height: 22px;
+  min-width: 24px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: #555;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.nt-btn:hover {
+  background: #ddd8cc;
+  border-color: #c8c2b4;
+  color: #222;
+}
+.nt-btn b { font-weight: 700; }
+.nt-btn i { font-style: italic; }
+.nt-btn u { text-decoration: underline; }
+
+.nt-divider {
+  width: 1px;
+  height: 16px;
+  background: #ccc8bc;
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.nt-clear { color: #a04040; }
+.nt-clear:hover { background: #f0e0e0; border-color: #d0a0a0; color: #802020; }
+.nt-copy  { color: #406080; }
+.nt-copy:hover  { background: #e0eaf0; border-color: #a0c0d0; color: #204060; }
+
+/* Lined editor */
+.notepad-editor {
+  flex: 1;
+  padding: 16px 20px 16px 52px;
+  overflow-y: auto;
+  outline: none;
+  font-family: 'Caveat', 'DM Mono', cursive;
+  font-size: 17px;
+  line-height: 32px;
+  color: #1a1a2e;
+  caret-color: #5555cc;
+  word-break: break-word;
+
+  /* Lined notebook background */
+  background-image:
+    /* Red margin line */
+    linear-gradient(to right, transparent 38px, #e8a0a0 38px, #e8a0a0 39px, transparent 39px),
+    /* Blue ruled lines */
+    repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 31px,
+      #b8cce4 31px,
+      #b8cce4 32px
+    );
+  background-attachment: local;
+}
+
+/* Placeholder */
+.notepad-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #bbb5a8;
+  pointer-events: none;
+  font-style: italic;
+}
+
+/* Typography inside editor */
+.notepad-editor h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #2a2a4a;
+  line-height: 32px;
+  margin: 0;
+}
+.notepad-editor ul,
+.notepad-editor ol {
+  padding-left: 20px;
+  margin: 0;
+}
+.notepad-editor li { line-height: 32px; }
+.notepad-editor mark,
+.notepad-editor [style*="background-color"] {
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* Scrollbar — light theme for notepad */
+.notepad-editor::-webkit-scrollbar { width: 5px; }
+.notepad-editor::-webkit-scrollbar-track { background: #f0ece4; }
+.notepad-editor::-webkit-scrollbar-thumb { background: #c8c2b4; border-radius: 3px; }
+
+/* Notepad in dock — show mini preview */
+.dock-slot .notepad-wrap {
+  transform-origin: top left;
+  pointer-events: none;
+}
