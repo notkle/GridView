@@ -1,7 +1,7 @@
-// viewgrid — content.js
+// gridview — content.js
 // Injected into every player.twitch.tv frame by the extension.
 // Has full DOM access to the Twitch player regardless of cross-origin rules.
-// Detects ads and posts messages to the parent (viewgrid) page.
+// Detects ads and posts messages to the parent (gridview) page.
 
 (function () {
   'use strict';
@@ -55,15 +55,15 @@
   }
 
   // ── Messaging ────────────────────────────────────────────────
-  // Post to the top-level page (viewgrid). '*' target origin is fine
-  // here because viewgrid's listener validates the message type.
+  // Post to the top-level page (gridview). '*' target origin is fine
+  // here because gridview's listener validates the message type.
   function notify(isAd) {
     try {
       window.top.postMessage({
-        source: 'viewgrid-extension',
+        source: 'gridview-extension',
         type: 'vg-ad',
         active: isAd,
-        // Include the channel name so viewgrid knows which slot to act on
+        // Include the channel name so gridview knows which slot to act on
         channel: extractChannel(),
       }, '*');
     } catch (_) {
@@ -89,7 +89,7 @@
       if (!adActive) {
         adActive = true;
         notify(true);
-        console.debug('[viewgrid] Ad detected on', extractChannel());
+        console.debug('[gridview] Ad detected on', extractChannel());
       }
     } else {
       if (adActive) {
@@ -98,7 +98,7 @@
           adActive = false;
           cleanTicks = 0;
           notify(false);
-          console.debug('[viewgrid] Ad cleared on', extractChannel());
+          console.debug('[gridview] Ad cleared on', extractChannel());
         }
       }
     }
@@ -109,5 +109,5 @@
     setInterval(tick, POLL_MS);
   }, 2000);
 
-  console.debug('[viewgrid] Ad detector active on', extractChannel());
+  console.debug('[gridview] Ad detector active on', extractChannel());
 })();
