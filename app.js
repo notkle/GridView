@@ -1,6 +1,6 @@
 // ─── State ────────────────────────────────────────────────────
 const state = {
-  streams:    [null, null, null, null],
+  streams:    [null, null, null, null], // {service, value, label, isLive} | null
   zoomMode:   false,
   focusIndex: 0,
   adDetectors:{},
@@ -9,159 +9,138 @@ const state = {
   _autoSwappedFrom: null,
 };
 
-// ─── Piped instance ───────────────────────────────────────────
-const PIPED_FALLBACKS = [
-  'https://piped.video',
-  'https://piped.adminforge.de',
-  'https://piped.privacydev.net',
-];
-let pipedInstance = PIPED_FALLBACKS[0];
-
-async function resolvePipedInstance() {
-  for (const fallback of PIPED_FALLBACKS) {
-    try {
-      const res = await fetch(fallback + '/feed/trending', {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(3000),
-        mode: 'no-cors',
-      });
-      pipedInstance = fallback;
-      console.log('[gridview] Piped instance:', pipedInstance);
-      break;
-    } catch (_) {}
-  }
-  const hint = document.getElementById('yt-instance-hint');
-  if (hint) hint.textContent = 'browse & pick';
-}
+// ─── Notepad storage ──────────────────────────────────────────
+// Each notepad slot saves to localStorage so content survives refresh.
+const notepadData = [0,1,2,3].map(i => {
+  return { content: localStorage.getItem(`gridview-note-${i}`) || '' };
+});
 
 // ─── Service Config ───────────────────────────────────────────
-const BROWSER_HOME = 'https://piped.video';
-
 const SERVICES = {
   twitch: {
     label:      'twitch',
     isLive:     true,
+    isNotepad:  false,
+    needsInput: true,
     inputLabel: 'Channel name',
     placeholder:'e.g. yourfavoritestreamer',
-    needsInput: true,
-    isBrowser:  false,
     embedUrl: (v) =>
       `https://player.twitch.tv/?channel=${encodeURIComponent(v.trim())}&parent=${location.hostname}&autoplay=true`,
   },
-  youtube: {
-    label:      'youtube',
+  notepad: {
+    label:      'notepad',
     isLive:     false,
+    isNotepad:  true,
     needsInput: false,
-    isBrowser:  true,   // gets nav bar, loads Piped
-    embedUrl: () => pipedInstance,
-  },
-  kick: {
-    label:      'kick',
-    isLive:     true,
-    inputLabel: 'Channel name',
-    placeholder:'e.g. channelname',
-    needsInput: true,
-    isBrowser:  false,
-    embedUrl: (v) =>
-      `https://player.kick.com/${encodeURIComponent(v.trim())}?autoplay=true`,
-  },
-  url: {
-    label:      'url',
-    isLive:     false,
-    inputLabel: 'Full URL',
-    placeholder:'https://example.com',
-    needsInput: true,
-    isBrowser:  true,   // also gets nav bar
-    embedUrl: (v) => {
-      v = v.trim();
-      if (v && !v.match(/^https?:\/\//i)) v = 'https://' + v;
-      return v;
-    },
+    embedUrl:   () => '',
   },
 };
 
-// ─── Iframe pool ──────────────────────────────────────────────
-// One iframe per slot, never destroyed, just moved.
-const pool = [0, 1, 2, 3].map(i => {
+// ─── Iframe pool (Twitch only) ────────────────────────────────
+const pool = [0,1,2,3].map(i => {
   const f = document.createElement('iframe');
   f.id    = `pool-iframe-${i}`;
   f.allow = 'autoplay; fullscreen';
   f.allowFullscreen = true;
-  f.style.cssText = 'width:100%;height:100%;border:none;display:block;flex:1;min-height:0;background:#000;';
+  f.style.cssText = 'width:100%;height:100%;border:none;display:block;background:#000;';
   return f;
 });
 
-// ─── Browser nav bars ─────────────────────────────────────────
-// Each browser-type slot has a persistent nav bar wrapper.
-// The wrapper holds: [nav bar][iframe]. Both stay alive.
-const browserWrappers = [0, 1, 2, 3].map(i => {
+// ─── Notepad panels (persistent, one per slot) ────────────────
+const notepads = [0,1,2,3].map(i => buildNotepad(i));
+
+function buildNotepad(i) {
   const wrap = document.createElement('div');
-  wrap.id        = `browser-wrap-${i}`;
-  wrap.style.cssText = 'display:flex;flex-direction:column;width:100%;height:100%;';
+  wrap.className = 'notepad-wrap';
+  wrap.id = `notepad-${i}`;
 
-  const nav = document.createElement('div');
-  nav.className  = 'browser-nav';
-  nav.innerHTML  = `
-    <button class="nav-btn" id="nav-back-${i}" onclick="navBack(${i})" title="Back">&#8592;</button>
-    <button class="nav-btn" id="nav-fwd-${i}"  onclick="navFwd(${i})"  title="Forward">&#8594;</button>
-    <button class="nav-btn" id="nav-home-${i}" onclick="navHome(${i})" title="Home">&#8962;</button>
-    <input  class="nav-url" id="nav-url-${i}"  type="text" spellcheck="false" placeholder="https://..." />
-    <button class="nav-go"  id="nav-go-${i}"   onclick="navGo(${i})">go</button>
+  // Toolbar
+  const toolbar = document.createElement('div');
+  toolbar.className = 'notepad-toolbar';
+  toolbar.innerHTML = `
+    <div class="notepad-tools-left">
+      <button class="nt-btn" data-cmd="bold"      title="Bold (Ctrl+B)"><b>B</b></button>
+      <button class="nt-btn" data-cmd="italic"    title="Italic (Ctrl+I)"><i>I</i></button>
+      <button class="nt-btn" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+      <div class="nt-divider"></div>
+      <button class="nt-btn" data-cmd="insertUnorderedList" title="Bullet list">&#8226;&#8212;</button>
+      <button class="nt-btn" data-cmd="insertOrderedList"   title="Numbered list">1&#8212;</button>
+      <div class="nt-divider"></div>
+      <button class="nt-btn" data-cmd="h1"  title="Heading">H</button>
+      <button class="nt-btn" data-cmd="hl"  title="Highlight">&#9650;</button>
+      <div class="nt-divider"></div>
+      <button class="nt-btn" data-cmd="undo" title="Undo (Ctrl+Z)">&#8630;</button>
+      <button class="nt-btn" data-cmd="redo" title="Redo (Ctrl+Y)">&#8631;</button>
+    </div>
+    <div class="notepad-tools-right">
+      <button class="nt-btn nt-clear" data-cmd="clear" title="Clear all">&#10005; clear</button>
+      <button class="nt-btn nt-copy"  data-cmd="copy"  title="Copy all text">&#10697; copy</button>
+    </div>
   `;
-  wrap.appendChild(nav);
 
-  // Wire Enter key on url bar
-  setTimeout(() => {
-    const urlBar = document.getElementById(`nav-url-${i}`);
-    if (urlBar) urlBar.addEventListener('keydown', e => { if (e.key === 'Enter') navGo(i); });
-  }, 0);
+  // Lined writing area
+  const editor = document.createElement('div');
+  editor.className       = 'notepad-editor';
+  editor.id              = `notepad-editor-${i}`;
+  editor.contentEditable = 'true';
+  editor.spellcheck      = true;
+  editor.setAttribute('data-placeholder', 'start writing...');
 
-  return wrap;
-});
+  // Restore saved content
+  if (notepadData[i].content) editor.innerHTML = notepadData[i].content;
 
-// Attach pool iframes into browser wrappers
-pool.forEach((iframe, i) => {
-  browserWrappers[i].appendChild(iframe);
-});
-
-// Navigate the browser panel
-function navGo(i) {
-  const urlBar = document.getElementById(`nav-url-${i}`);
-  if (!urlBar) return;
-  let url = urlBar.value.trim();
-  if (!url) return;
-  if (!url.match(/^https?:\/\//i)) url = 'https://' + url;
-  urlBar.value = url;
-  pool[i].src  = url;
-  if (state.streams[i]) state.streams[i].embedUrl = url;
-}
-function navBack(i)  { try { pool[i].contentWindow.history.back();    } catch(_) {} }
-function navFwd(i)   { try { pool[i].contentWindow.history.forward(); } catch(_) {} }
-function navHome(i)  {
-  const stream = state.streams[i];
-  const home   = stream ? SERVICES[stream.service].embedUrl(stream.value) : BROWSER_HOME;
-  pool[i].src  = home;
-  const urlBar = document.getElementById(`nav-url-${i}`);
-  if (urlBar) urlBar.value = home;
-}
-
-// Update url bar when iframe navigates (same-origin only; cross-origin silently ignored)
-pool.forEach((iframe, i) => {
-  iframe.addEventListener('load', () => {
-    const urlBar = document.getElementById(`nav-url-${i}`);
-    if (!urlBar) return;
-    try {
-      const href = iframe.contentWindow.location.href;
-      if (href && href !== 'about:blank') urlBar.value = href;
-    } catch (_) { /* cross-origin */ }
+  // Auto-save on input
+  editor.addEventListener('input', () => {
+    notepadData[i].content = editor.innerHTML;
+    localStorage.setItem(`gridview-note-${i}`, editor.innerHTML);
   });
-});
 
-// ─── Which container to use for a slot ────────────────────────
-function containerFor(i) {
+  // Toolbar actions
+  toolbar.addEventListener('click', e => {
+    const btn = e.target.closest('[data-cmd]');
+    if (!btn) return;
+    const cmd = btn.dataset.cmd;
+    editor.focus();
+    switch (cmd) {
+      case 'bold':               document.execCommand('bold');               break;
+      case 'italic':             document.execCommand('italic');             break;
+      case 'underline':          document.execCommand('underline');          break;
+      case 'insertUnorderedList':document.execCommand('insertUnorderedList');break;
+      case 'insertOrderedList':  document.execCommand('insertOrderedList');  break;
+      case 'undo':               document.execCommand('undo');               break;
+      case 'redo':               document.execCommand('redo');               break;
+      case 'h1':
+        document.execCommand('formatBlock', false, 'h3');
+        break;
+      case 'hl':
+        document.execCommand('hiliteColor', false, '#3a3200');
+        break;
+      case 'clear':
+        if (confirm('Clear this notepad?')) {
+          editor.innerHTML = '';
+          notepadData[i].content = '';
+          localStorage.removeItem(`gridview-note-${i}`);
+        }
+        break;
+      case 'copy':
+        navigator.clipboard.writeText(editor.innerText).then(() => {
+          btn.textContent = '✓ copied';
+          setTimeout(() => { btn.innerHTML = '&#10697; copy'; }, 1500);
+        });
+        break;
+    }
+  });
+
+  wrap.appendChild(toolbar);
+  wrap.appendChild(editor);
+  return wrap;
+}
+
+// ─── Which element represents a slot ──────────────────────────
+function slotEl(i) {
   const stream = state.streams[i];
-  if (stream && SERVICES[stream.service].isBrowser) return browserWrappers[i];
-  return pool[i];
+  if (!stream) return null;
+  return stream.service === 'notepad' ? notepads[i] : pool[i];
 }
 
 // ─── Picker ───────────────────────────────────────────────────
@@ -186,7 +165,7 @@ function selectService(service) {
   pickerService = service;
   const cfg = SERVICES[service];
   if (!cfg.needsInput) {
-    addStream(pickerTargetIndex, service, '', 'youtube');
+    addStream(pickerTargetIndex, service, '', service);
     closePicker();
     return;
   }
@@ -205,19 +184,9 @@ function confirmStream() {
 }
 
 function addStream(index, service, value, label) {
-  const cfg    = SERVICES[service];
-  const url    = cfg.embedUrl(value);
-  state.streams[index] = { service, value, label, isLive: cfg.isLive, embedUrl: url };
-
-  // Set iframe src
-  pool[index].src = url;
-
-  // Pre-fill nav bar if browser type
-  if (cfg.isBrowser) {
-    const urlBar = document.getElementById(`nav-url-${index}`);
-    if (urlBar) urlBar.value = url;
-  }
-
+  const cfg = SERVICES[service];
+  state.streams[index] = { service, value, label, isLive: cfg.isLive };
+  if (service === 'twitch') pool[index].src = cfg.embedUrl(value);
   layout();
   startAdDetection(index);
 }
@@ -230,9 +199,7 @@ function removeStream(index) {
   stopAdDetection(index);
   state.streams[index]  = null;
   state.adActive[index] = false;
-  pool[index].src       = 'about:blank';
-  const urlBar = document.getElementById(`nav-url-${index}`);
-  if (urlBar) urlBar.value = '';
+  if (pool[index].src !== 'about:blank') pool[index].src = 'about:blank';
   layout();
 }
 
@@ -242,14 +209,25 @@ function layout() {
   updateOverlays();
 }
 
-function placeSlot(i, targetEl) {
-  const el = containerFor(i);
-  if (el.parentNode !== targetEl) targetEl.appendChild(el);
+function place(i, target) {
+  const el = slotEl(i);
+  if (el && el.parentNode !== target) target.appendChild(el);
 }
 
-function unplaceSlot(i, fromEl) {
-  const el = containerFor(i);
-  if (el.parentNode === fromEl) fromEl.removeChild(el);
+function unplace(i, from) {
+  const el = slotEl(i);
+  if (el && el.parentNode === from) from.removeChild(el);
+}
+
+function showEmpty(cell, index) {
+  if (!cell.querySelector('.cell-empty')) {
+    cell.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.className = 'cell-empty';
+    empty.onclick   = () => openPicker(index);
+    empty.innerHTML = `<div class="plus-btn">+</div><span class="plus-label">add panel</span>`;
+    cell.appendChild(empty);
+  }
 }
 
 function layoutGrid() {
@@ -257,18 +235,11 @@ function layoutGrid() {
     const cell   = document.getElementById(`cell-${i}`);
     const stream = state.streams[i];
     if (!stream) {
-      unplaceSlot(i, cell);
-      if (!cell.querySelector('.cell-empty')) {
-        cell.innerHTML = '';
-        const empty = document.createElement('div');
-        empty.className = 'cell-empty';
-        empty.onclick   = () => openPicker(i);
-        empty.innerHTML = `<div class="plus-btn">+</div><span class="plus-label">add stream</span>`;
-        cell.appendChild(empty);
-      }
+      unplace(i, cell);
+      showEmpty(cell, i);
     } else {
       cell.querySelector('.cell-empty')?.remove();
-      placeSlot(i, cell);
+      place(i, cell);
     }
   }
 }
@@ -278,28 +249,26 @@ function layoutZoom() {
   const dockEls = [0,1,2].map(d => document.getElementById(`dock-${d}`));
   const others  = [0,1,2,3].filter(i => i !== state.focusIndex);
 
-  // Focus → main
   if (state.streams[state.focusIndex]) {
     mainEl.querySelector('.zoom-empty')?.remove();
-    placeSlot(state.focusIndex, mainEl);
+    place(state.focusIndex, mainEl);
   } else {
-    unplaceSlot(state.focusIndex, mainEl);
+    unplace(state.focusIndex, mainEl);
     if (!mainEl.querySelector('.zoom-empty'))
-      mainEl.innerHTML = `<div class="zoom-empty"><span>select a stream to focus</span></div>`;
+      mainEl.innerHTML = `<div class="zoom-empty"><span>select a panel to focus</span></div>`;
   }
 
-  // Others → dock
   dockEls.forEach((slot, di) => {
     const si     = others[di];
     const stream = state.streams[si];
     if (!stream) {
-      unplaceSlot(si, slot);
+      unplace(si, slot);
       if (!slot.querySelector('.dock-slot-empty')) {
         slot.innerHTML = '';
-        const empty = document.createElement('div');
-        empty.className = 'dock-slot-empty';
-        empty.innerHTML = `<span>empty</span>`;
-        slot.appendChild(empty);
+        const e = document.createElement('div');
+        e.className = 'dock-slot-empty';
+        e.innerHTML = `<span>empty</span>`;
+        slot.appendChild(e);
       }
       slot.onclick = null;
       slot.classList.remove('has-stream');
@@ -307,7 +276,7 @@ function layoutZoom() {
       slot.querySelector('.dock-slot-empty')?.remove();
       slot.classList.add('has-stream');
       slot.onclick = () => setZoomFocus(si);
-      placeSlot(si, slot);
+      place(si, slot);
     }
   });
 }
@@ -323,7 +292,7 @@ function updateGridOverlays() {
     const stream = state.streams[i];
     cell.querySelector('.cell-overlay')?.remove();
     cell.querySelector('.cell-label')?.remove();
-    if (!stream) continue;
+    if (!stream || stream.service === 'notepad') continue; // notepad has its own UI
 
     const overlay = document.createElement('div');
     overlay.className = 'cell-overlay';
@@ -337,13 +306,10 @@ function updateGridOverlays() {
       </div>`;
     cell.appendChild(overlay);
 
-    // Label only for non-browser panels (browser has nav bar)
-    if (!SERVICES[stream.service].isBrowser) {
-      const lbl = document.createElement('div');
-      lbl.className   = 'cell-label';
-      lbl.textContent = `${stream.service} · ${stream.label}`;
-      cell.appendChild(lbl);
-    }
+    const lbl = document.createElement('div');
+    lbl.className   = 'cell-label';
+    lbl.textContent = `${stream.service} · ${stream.label}`;
+    cell.appendChild(lbl);
   }
 }
 
@@ -379,12 +345,12 @@ function updateZoomOverlays() {
   });
 }
 
-// ─── Zoom toggle ──────────────────────────────────────────────
+// ─── Zoom ─────────────────────────────────────────────────────
 function toggleZoom() {
   state.zoomMode = !state.zoomMode;
   document.getElementById('zoomToggle').setAttribute('aria-pressed', state.zoomMode);
-  document.getElementById('gridView').style.display  = state.zoomMode ? 'none' : 'grid';
-  document.getElementById('zoomView').style.display  = state.zoomMode ? 'flex' : 'none';
+  document.getElementById('gridView').style.display = state.zoomMode ? 'none' : 'grid';
+  document.getElementById('zoomView').style.display = state.zoomMode ? 'flex'  : 'none';
   document.getElementById('lbl-zoom').classList.toggle('active', state.zoomMode);
   document.getElementById('lbl-grid').classList.toggle('active', !state.zoomMode);
   if (state.zoomMode) {
@@ -411,10 +377,9 @@ function startAdDetection(slotIndex) {
   const msgHandler = (e) => {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.source === 'gridview-extension' && e.data.type === 'vg-ad') {
-      const channel = (e.data.channel || '').toLowerCase().trim();
-      const s = state.streams[slotIndex];
-      if (s && s.value.toLowerCase().trim() === channel)
-        handleAdDetected(slotIndex, !!e.data.active);
+      const ch = (e.data.channel || '').toLowerCase().trim();
+      const s  = state.streams[slotIndex];
+      if (s && s.value.toLowerCase().trim() === ch) handleAdDetected(slotIndex, !!e.data.active);
       return;
     }
     const type = (e.data.type || e.data.event || '');
@@ -438,7 +403,6 @@ function startAdDetection(slotIndex) {
           el.offsetParent !== null)
       );
     } catch (_) {}
-
     if (found) {
       handleAdDetected(slotIndex, true);
     } else if (state.adActive[slotIndex]) {
@@ -510,5 +474,4 @@ window.simulateAd = (i, isAd) => handleAdDetected(i, isAd);
 
 // ─── Init ─────────────────────────────────────────────────────
 document.getElementById('lbl-grid').classList.add('active');
-resolvePipedInstance();
 layout();
