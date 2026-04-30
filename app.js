@@ -235,8 +235,9 @@ function confirmStream() {
 
 function addStream(index, service, value, label) {
   const cfg = SERVICES[service];
+  const url  = cfg.embedUrl(value);
   state.streams[index] = { service, value, label, isLive: cfg.isLive };
-  if (service === 'twitch') pool[index].src = cfg.embedUrl(value);
+  if (service === 'twitch' || service === 'youtube') pool[index].src = url;
   layout();
   startAdDetection(index);
 }
