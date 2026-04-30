@@ -49,8 +49,27 @@ const SERVICES = {
 };
 
 function extractYouTubeId(url) {
-  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-  return m ? m[1] : null;
+  // Handles all common formats:
+  // https://www.youtube.com/watch?v=ID
+  // https://youtu.be/ID
+  // https://www.youtube.com/embed/ID
+  // https://www.youtube.com/live/ID
+  // https://youtube.com/shorts/ID
+  // Raw 11-char ID on its own
+  url = url.trim();
+  const patterns = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+    /\/embed\/([a-zA-Z0-9_-]{11})/,
+    /\/live\/([a-zA-Z0-9_-]{11})/,
+    /\/shorts\/([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 // ─── Iframe pool (Twitch + YouTube) ──────────────────────────
@@ -196,6 +215,20 @@ function selectService(service) {
 function confirmStream() {
   const val = document.getElementById('modalInput').value.trim();
   if (!val || pickerTargetIndex === null || !pickerService) return;
+
+  // Validate YouTube URL before closing picker
+  if (pickerService === 'youtube') {
+    const id = extractYouTubeId(val);
+    if (!id) {
+      const input = document.getElementById('modalInput');
+      input.style.borderColor = '#e91916';
+      input.placeholder = 'could not find video ID — try the full URL';
+      input.value = '';
+      setTimeout(() => { input.style.borderColor = ''; input.placeholder = 'https://youtube.com/watch?v=...'; }, 3000);
+      return;
+    }
+  }
+
   addStream(pickerTargetIndex, pickerService, val, val);
   closePicker();
 }
