@@ -377,13 +377,14 @@ function startAdDetection(slotIndex) {
   const msgHandler = (e) => {
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.source === 'gridview-extension' && e.data.type === 'vg-ad') {
-      const ch = (e.data.channel || '').toLowerCase().trim();
-      const s  = state.streams[slotIndex];
-      if (s && s.value.toLowerCase().trim() === ch) handleAdDetected(slotIndex, !!e.data.active);
+      const ch  = (e.data.channel || '').toLowerCase().trim();
+      const s   = state.streams[slotIndex];
+      if (s && s.value.toLowerCase().trim() === ch)
+        handleAdDetected(slotIndex, !!e.data.active, e.data.duration || null);
       return;
     }
     const type = (e.data.type || e.data.event || '');
-    if (type.toLowerCase().includes('ad')) handleAdDetected(slotIndex, true);
+    if (type.toLowerCase().includes('ad')) handleAdDetected(slotIndex, true, null);
   };
   window.addEventListener('message', msgHandler);
 
@@ -404,12 +405,12 @@ function startAdDetection(slotIndex) {
       );
     } catch (_) {}
     if (found) {
-      handleAdDetected(slotIndex, true);
+      handleAdDetected(slotIndex, true, null);
     } else if (state.adActive[slotIndex]) {
       state.adGrace[slotIndex] = (state.adGrace[slotIndex] || 0) + 1;
       if (state.adGrace[slotIndex] >= 4) {
         state.adGrace[slotIndex] = 0;
-        handleAdDetected(slotIndex, false);
+        handleAdDetected(slotIndex, false, null);
       }
     }
   }, AD_CHECK_INTERVAL);
@@ -425,22 +426,110 @@ function stopAdDetection(slotIndex) {
   delete state.adDetectors[slotIndex];
 }
 
-function handleAdDetected(slotIndex, isAd) {
-  if (state.adActive[slotIndex] === isAd) return;
+// ─── Countdown ────────────────────────────────────────────────
+const countdown = {
+  timers:    {},   // slotIndex → { remaining, intervalId, swapScheduled }
+};
+
+function startCountdown(slotIndex, durationSeconds) {
+  stopCountdown(slotIndex);
+  if (!durationSeconds) return;
+
+  const data = {
+    remaining:      durationSeconds,
+    intervalId:     null,
+    swapScheduled:  false,
+  };
+  countdown.timers[slotIndex] = data;
+
+  data.intervalId = setInterval(() => {
+    data.remaining--;
+    updateCountdownDisplay();
+
+    // Pre-emptive swap back at 3 seconds remaining
+    if (
+      data.remaining <= 3 &&
+      !data.swapScheduled &&
+      state.zoomMode &&
+      state._autoSwappedFrom === slotIndex
+    ) {
+      data.swapScheduled = true;
+      setTimeout(() => {
+        if (state.streams[slotIndex]) {
+          state.focusIndex       = slotIndex;
+          state._autoSwappedFrom = null;
+          layout();
+        }
+      }, data.remaining * 1000);
+    }
+
+    if (data.remaining <= 0) stopCountdown(slotIndex);
+  }, 1000);
+
+  updateCountdownDisplay();
+}
+
+function stopCountdown(slotIndex) {
+  const data = countdown.timers[slotIndex];
+  if (!data) return;
+  clearInterval(data.intervalId);
+  delete countdown.timers[slotIndex];
+  updateCountdownDisplay();
+}
+
+function updateCountdownDisplay() {
+  const el = document.getElementById('ad-alert');
+  const anyAd = Object.values(state.adActive).some(Boolean);
+  if (!anyAd) { el.style.display = 'none'; return; }
+
+  // Find the longest active countdown to display
+  let maxRemaining = null;
+  for (const [, data] of Object.entries(countdown.timers)) {
+    if (maxRemaining === null || data.remaining > maxRemaining)
+      maxRemaining = data.remaining;
+  }
+
+  el.style.display = 'block';
+  const pill = el.querySelector('.ad-alert-pill');
+  if (!pill) return;
+
+  if (maxRemaining !== null && maxRemaining > 0) {
+    const m = Math.floor(maxRemaining / 60);
+    const s = String(maxRemaining % 60).padStart(2, '0');
+    pill.innerHTML = `<span class="ad-dot"></span> ad break &nbsp;<span class="ad-timer">${m}:${s}</span>`;
+  } else {
+    pill.innerHTML = `<span class="ad-dot"></span> ad detected — swapping focus`;
+  }
+}
+
+function handleAdDetected(slotIndex, isAd, duration) {
+  const wasAd = state.adActive[slotIndex];
   state.adActive[slotIndex] = isAd;
+
   document.getElementById(`adpill-${slotIndex}`)?.classList.toggle('visible', isAd);
   document.getElementById(`dockad-${slotIndex}`)?.classList.toggle('visible', isAd);
-  showAdAlert(isAd);
-  if (isAd && state.zoomMode && slotIndex === state.focusIndex) autoSwapAway(slotIndex);
-  if (!isAd && state.zoomMode && state._autoSwappedFrom === slotIndex) {
-    setTimeout(() => {
-      if (!state.adActive[slotIndex] && state.streams[slotIndex]) {
-        state.focusIndex = slotIndex;
-        state._autoSwappedFrom = null;
-        layout();
-        showAdAlert(false);
-      }
-    }, 1200);
+
+  if (isAd) {
+    // Start or refresh countdown if we have a duration
+    if (duration) startCountdown(slotIndex, duration);
+    updateCountdownDisplay();
+    if (!wasAd && state.zoomMode && slotIndex === state.focusIndex) {
+      autoSwapAway(slotIndex);
+    }
+  } else {
+    stopCountdown(slotIndex);
+    updateCountdownDisplay();
+    // Swap back if we auto-swapped away from this slot
+    if (state.zoomMode && state._autoSwappedFrom === slotIndex) {
+      setTimeout(() => {
+        if (!state.adActive[slotIndex] && state.streams[slotIndex]) {
+          state.focusIndex       = slotIndex;
+          state._autoSwappedFrom = null;
+          layout();
+          updateCountdownDisplay();
+        }
+      }, 1200);
+    }
   }
 }
 
@@ -449,24 +538,9 @@ function autoSwapAway(adSlotIndex) {
     i !== adSlotIndex && state.streams[i] !== null && !state.adActive[i]);
   if (!candidates.length) return;
   state._autoSwappedFrom = adSlotIndex;
-  state.focusIndex = candidates[0];
+  state.focusIndex       = candidates[0];
   layout();
-  flashAdAlert();
-}
-
-let adAlertTimeout = null;
-function showAdAlert(visible) {
-  const el = document.getElementById('ad-alert');
-  if (visible) { el.style.display = 'block'; return; }
-  if (!Object.values(state.adActive).some(Boolean)) el.style.display = 'none';
-}
-function flashAdAlert() {
-  document.getElementById('ad-alert').style.display = 'block';
-  clearTimeout(adAlertTimeout);
-  adAlertTimeout = setTimeout(() => {
-    if (!Object.values(state.adActive).some(Boolean))
-      document.getElementById('ad-alert').style.display = 'none';
-  }, 5000);
+  updateCountdownDisplay();
 }
 
 // ─── Dev helper ───────────────────────────────────────────────
