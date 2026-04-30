@@ -36,7 +36,7 @@ const SERVICES = {
     placeholder:'https://youtube.com/watch?v=...',
     embedUrl: (v) => {
       const id = extractYouTubeId(v.trim());
-      return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : '';
+      return id ? `https://www.youtube.com/embed/${id}` : '';
     },
   },
   notepad: {
@@ -76,8 +76,9 @@ function extractYouTubeId(url) {
 const pool = [0,1,2,3].map(i => {
   const f = document.createElement('iframe');
   f.id    = `pool-iframe-${i}`;
-  f.allow = 'autoplay; fullscreen';
+  f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
   f.allowFullscreen = true;
+  f.setAttribute('allowfullscreen', '');
   f.style.cssText = 'width:100%;height:100%;border:none;display:block;background:#000;';
   return f;
 });
@@ -227,6 +228,9 @@ function confirmStream() {
       setTimeout(() => { input.style.borderColor = ''; input.placeholder = 'https://youtube.com/watch?v=...'; }, 3000);
       return;
     }
+    addStream(pickerTargetIndex, pickerService, val, `yt:${id}`);
+    closePicker();
+    return;
   }
 
   addStream(pickerTargetIndex, pickerService, val, val);
