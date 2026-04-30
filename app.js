@@ -559,27 +559,39 @@ function updateCountdownDisplay() {
 
 function handleAdDetected(slotIndex, isAd, duration) {
   const wasAd = state.adActive[slotIndex];
-  state.adActive[slotIndex] = isAd;
 
+  // Ignore repeated messages for the same state — prevents constant re-swapping
+  if (wasAd === isAd) {
+    // Still update countdown if we get a fresh duration during an ongoing ad
+    if (isAd && duration) {
+      startCountdown(slotIndex, duration);
+      updateCountdownDisplay();
+    }
+    return;
+  }
+
+  state.adActive[slotIndex] = isAd;
   document.getElementById(`adpill-${slotIndex}`)?.classList.toggle('visible', isAd);
   document.getElementById(`dockad-${slotIndex}`)?.classList.toggle('visible', isAd);
 
   if (isAd) {
-    // Start or refresh countdown if we have a duration
     if (duration) startCountdown(slotIndex, duration);
     updateCountdownDisplay();
-    if (!wasAd && state.zoomMode && slotIndex === state.focusIndex) {
+    // Only swap if this slot is currently the focus
+    if (state.zoomMode && slotIndex === state.focusIndex) {
       autoSwapAway(slotIndex);
     }
   } else {
     stopCountdown(slotIndex);
     updateCountdownDisplay();
-    // Swap back if we auto-swapped away from this slot
+    // Only swap back if we specifically auto-swapped away from this slot
     if (state.zoomMode && state._autoSwappedFrom === slotIndex) {
+      // Small delay to let Twitch stream stabilise before returning
       setTimeout(() => {
         if (!state.adActive[slotIndex] && state.streams[slotIndex]) {
           state.focusIndex       = slotIndex;
           state._autoSwappedFrom = null;
+          unmuteSlot(slotIndex);
           layout();
           updateCountdownDisplay();
         }
@@ -594,8 +606,30 @@ function autoSwapAway(adSlotIndex) {
   if (!candidates.length) return;
   state._autoSwappedFrom = adSlotIndex;
   state.focusIndex       = candidates[0];
+  // Mute the ad slot but keep it playing so Twitch doesn't pause the stream/timer
+  muteSlot(adSlotIndex);
   layout();
   updateCountdownDisplay();
+}
+
+// Mute a slot's iframe via postMessage (Twitch player API)
+function muteSlot(slotIndex) {
+  try {
+    pool[slotIndex].contentWindow.postMessage(
+      { eventName: 'mute', params: { muted: true } }, '*'
+    );
+  } catch (_) {}
+  // Also set iframe volume to 0 via Twitch embed URL hack — 
+  // keep the src unchanged so stream keeps playing
+  pool[slotIndex].style.opacity = '1'; // stays visible in dock
+}
+
+function unmuteSlot(slotIndex) {
+  try {
+    pool[slotIndex].contentWindow.postMessage(
+      { eventName: 'mute', params: { muted: false } }, '*'
+    );
+  } catch (_) {}
 }
 
 // ─── Dev helper ───────────────────────────────────────────────
