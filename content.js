@@ -22,42 +22,38 @@
     '.player-ad-overlay',
     '[class*="VideoAdOverlay"]',
     '[class*="video-ad"]',
+    // "Ad ⓘ" badge visible top-right of the commercial break screen
+    '[data-a-target="player-ad-indicator"]',
+    '[class*="AdIndicator"]',
+    '[class*="ad-indicator"]',
   ];
 
   // ── Duration parser ───────────────────────────────────────────
-  // Twitch shows a banner like:
-  // "KaiCenat is taking an ad break; stick around to support the stream! Ad (2:50)"
-  // Also matches plain "Ad (0:30)" countdown badges.
+  // Confirmed banner format from live testing:
+  // "Rexlent90 is taking an ad break; stick around to support the stream! Ad (1:37)"
+  // Also matches the standalone "Ad (0:30)" countdown badge.
   // Returns seconds as integer, or null if not found.
   function parseDuration() {
-    // Search all visible text nodes for (M:SS) or (SS) pattern
+    // Primary: scan all text-bearing elements for (M:SS) pattern
     const candidates = document.querySelectorAll(
-      'p, span, div, [class*="CoreText"], [class*="tw-c-text"], [class*="ScCoreText"]'
+      'p, span, div, [class*="CoreText"], [class*="ScCoreText"], [class*="tw-c-text"]'
     );
     for (const el of candidates) {
-      if (el.children.length > 2) continue; // skip containers
+      if (el.children.length > 3) continue;
       const text = el.textContent || '';
-      // Match (2:50) or (0:30) or (45)
-      const m = text.match(/\((\d+):(\d{2})\)/) || text.match(/\((\d+)\)/);
-      if (m) {
-        if (m[2] !== undefined) {
-          // M:SS format
-          return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-        } else {
-          // SS only format
-          return parseInt(m[1], 10);
-        }
-      }
+      // Matches (1:37), (0:30), (2:50) etc.
+      const m = text.match(/\((\d+):(\d{2})\)/);
+      if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     }
 
-    // Also check for "Commercial break in progress" screen specifically
+    // Fallback: scan full body text for the pattern
+    // (catches cases where the banner is in a non-standard element)
     const bodyText = document.body?.innerText || '';
-    if (bodyText.includes('Commercial break in progress')) {
-      const m = bodyText.match(/\((\d+):(\d{2})\)/) || bodyText.match(/Ad \((\d+)\)/);
-      if (m && m[2]) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-      if (m && !m[2]) return parseInt(m[1], 10);
-      return null; // break screen detected but no duration found
-    }
+    const m = bodyText.match(/Ad \((\d+):(\d{2})\)/);
+    if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+
+    // "Commercial break in progress" screen detected but no duration visible
+    if (bodyText.includes('Commercial break in progress')) return null;
 
     return null;
   }
@@ -71,10 +67,15 @@
       } catch (_) {}
     }
 
-    // "Commercial break in progress" full-screen fallback
-    if (document.body?.innerText?.includes('Commercial break in progress')) return true;
+    const bodyText = document.body?.innerText || '';
 
-    // Lone visible "Ad" text badge
+    // Confirmed "Commercial break in progress" full-screen
+    if (bodyText.includes('Commercial break in progress')) return true;
+
+    // Confirmed banner: "X is taking an ad break"
+    if (bodyText.includes('taking an ad break')) return true;
+
+    // Lone visible "Ad" text badge (top-right "Ad ⓘ")
     const els = document.querySelectorAll('p, span, div');
     for (const el of els) {
       if (
