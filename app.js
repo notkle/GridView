@@ -36,7 +36,7 @@ const SERVICES = {
     placeholder:'https://youtube.com/watch?v=...',
     embedUrl: (v) => {
       const id = extractYouTubeId(v.trim());
-      return id ? `https://www.youtube.com/embed/${id}` : '';
+      return id ? `https://www.youtube.com/embed/${id}?enablejsapi=1` : '';
     },
   },
   notepad: {
@@ -589,6 +589,8 @@ function handleAdDetected(slotIndex, isAd, duration) {
       // Small delay to let Twitch stream stabilise before returning
       setTimeout(() => {
         if (!state.adActive[slotIndex] && state.streams[slotIndex]) {
+          // Pause YouTube before swapping it back to dock
+          youtubePause(state.focusIndex);
           state.focusIndex       = slotIndex;
           state._autoSwappedFrom = null;
           unmuteSlot(slotIndex);
@@ -608,8 +610,31 @@ function autoSwapAway(adSlotIndex) {
   state.focusIndex       = candidates[0];
   // Mute the ad slot but keep it playing so Twitch doesn't pause the stream/timer
   muteSlot(adSlotIndex);
+  // If the new focus is YouTube, autoplay it
+  youtubePlay(candidates[0]);
   layout();
   updateCountdownDisplay();
+}
+
+// YouTube iframe postMessage API
+function youtubePlay(slotIndex) {
+  const stream = state.streams[slotIndex];
+  if (!stream || stream.service !== 'youtube') return;
+  try {
+    pool[slotIndex].contentWindow.postMessage(
+      JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*'
+    );
+  } catch (_) {}
+}
+
+function youtubePause(slotIndex) {
+  const stream = state.streams[slotIndex];
+  if (!stream || stream.service !== 'youtube') return;
+  try {
+    pool[slotIndex].contentWindow.postMessage(
+      JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }), '*'
+    );
+  } catch (_) {}
 }
 
 // Mute a slot's iframe via postMessage (Twitch player API)
