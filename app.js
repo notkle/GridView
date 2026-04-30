@@ -27,6 +27,18 @@ const SERVICES = {
     embedUrl: (v) =>
       `https://player.twitch.tv/?channel=${encodeURIComponent(v.trim())}&parent=${location.hostname}&autoplay=true`,
   },
+  youtube: {
+    label:      'youtube',
+    isLive:     false,
+    isNotepad:  false,
+    needsInput: true,
+    inputLabel: 'YouTube URL',
+    placeholder:'https://youtube.com/watch?v=...',
+    embedUrl: (v) => {
+      const id = extractYouTubeId(v.trim());
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : '';
+    },
+  },
   notepad: {
     label:      'notepad',
     isLive:     false,
@@ -36,7 +48,12 @@ const SERVICES = {
   },
 };
 
-// ─── Iframe pool (Twitch only) ────────────────────────────────
+function extractYouTubeId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// ─── Iframe pool (Twitch + YouTube) ──────────────────────────
 const pool = [0,1,2,3].map(i => {
   const f = document.createElement('iframe');
   f.id    = `pool-iframe-${i}`;
